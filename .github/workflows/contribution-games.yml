@@ -1,0 +1,58 @@
+name: Generate contribution games
+
+# Regenerates the animated T-Rex game (and the classic snake) from your live
+# contribution graph, then publishes the SVGs to the `output` branch, which the
+# README links to. Nothing on `main` is touched.
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"   # twice a day
+  workflow_dispatch:          # run it manually from the Actions tab
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ---- T-Rex commit run (custom generator) ----
+      - name: Fetch contributions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_LOGIN: ${{ github.repository_owner }}
+        run: python scripts/fetch_contributions.py contributions.json
+
+      - name: Build T-Rex SVG
+        run: |
+          mkdir -p dist
+          python scripts/generate_trex.py --input contributions.json --output dist/dino-game.svg
+
+      # ---- Classic snake (bonus, via the proven Platane/snk action) ----
+      - name: Build snake SVGs
+        uses: Platane/snk/svg-only@v3
+        with:
+          github_user_name: ${{ github.repository_owner }}
+          outputs: |
+            dist/github-snake.svg
+            dist/github-snake-dark.svg?palette=github-dark
+
+      # ---- Publish everything in dist/ to the `output` branch ----
+      - name: Publish to output branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: output
+          force_orphan: true
+          commit_message: "chore: regenerate contribution games"
